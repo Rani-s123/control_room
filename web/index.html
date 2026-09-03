@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Control Room — Real-time Live Stream Telemetry & Incident Engine</title>
+<meta name="description" content="AI Agent Crew for instant live stream incident detection, root cause attribution, frame inspection, and automated remediation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-dark: #07090e;
+    --panel-bg: rgba(18, 24, 38, 0.85);
+    --panel-border: rgba(45, 58, 82, 0.6);
+    --panel-hover: rgba(28, 38, 58, 0.9);
+    --text-main: #f1f5f9;
+    --text-muted: #8493a8;
+    --accent-blue: #38bdf8;
+    --accent-emerald: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-rose: #f43f5e;
+    --accent-purple: #a855f7;
+    --font-display: 'Outfit', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: var(--bg-dark);
+    background-image: 
+      radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.05) 0%, transparent 40%),
+      radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.04) 0%, transparent 40%);
+    color: var(--text-main);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* Header Slate */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(11, 15, 25, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .brand-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .brand-logo {
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+  }
+  .brand-logo svg { width: 22px; height: 22px; fill: white; }
+
+  .brand-title h1 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #ffffff;
+    line-height: 1.1;
+  }
+  .brand-title p {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent-blue);
+    letter-spacing: 0.08em;
+  }
+
+  .status-cluster {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(18, 24, 38, 0.6);
+    border: 1px solid var(--panel-border);
+    padding: 6px 14px;
+    border-radius: 20px;
+  }
+
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+
+  .lamp {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: all 0.3s ease;
+  }
+  .lamp.standby { background: var(--accent-amber); box-shadow: 0 0 10px var(--accent-amber); }
+  .lamp.live { background: var(--accent-rose); box-shadow: 0 0 14px var(--accent-rose); animation: pulse 1.5s infinite; }
+  .lamp.ok { background: var(--accent-emerald); box-shadow: 0 0 12px var(--accent-emerald); }
+
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.7; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .mode-badge {
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    color: var(--accent-blue);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .btn-roll {
+    background: linear-gradient(135deg, var(--accent-rose), #e11d48);
+    color: #ffffff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 0 18px rgba(244, 63, 94, 0.4);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-roll:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 0 24px rgba(244, 63, 94, 0.6);
+  }
+  .btn-roll:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  /* KPI Summary Ribbon */
+  .kpi-ribbon {
+    max-width: 1240px;
+    margin: 24px auto 0;
+    padding: 0 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+
+  .kpi-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .kpi-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .kpi-value {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-top: 4px;
+  }
+  .kpi-value.alert { color: var(--accent-rose); }
+  .kpi-value.good { color: var(--accent-emerald); }
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Main Spine Content */
+  main {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 24px 24px 80px;
+  }
+
+  .spine-container {
+    position: relative;
+    padding-left: 36px;
+  }
+  .spine-container::before {
+    content: "";
+    position: absolute;
+    left: 14px;
+    top: 10px;
+    bottom: 10px;
+    width: 2px;
+    background: linear-gradient(180deg, var(--panel-border), rgba(56, 189, 248, 0.2));
+  }
+
+  .empty-slate {
+    background: var(--panel-bg);
+    border: 1px dashed var(--panel-border);
+    border-radius: 12px;
+    padding: 60px 24px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .empty-slate h3 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    color: #ffffff;
+    margin-bottom: 8px;
+    letter-spacing: 0.05em;
+  }
+
+  .step-node {
+    position: relative;
+    margin-bottom: 28px;
+    animation: fadeIn 0.4s ease-out;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .step-dot {
+    position: absolute;
+    left: -36px;
+    top: 18px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--bg-dark);
+    border: 3px solid var(--accent-amber);
+    box-shadow: 0 0 12px var(--accent-amber);
+    z-index: 2;
+  }
+  .step-node.done .step-dot {
+    border-color: var(--accent-emerald);
+    box-shadow: 0 0 12px var(--accent-emerald);
+  }
+  .step-node.err .step-dot {
+    border-color: var(--accent-rose);
+    box-shadow: 0 0 12px var(--accent-rose);
+  }
+
+  .card-panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+    transition: border-color 0.2s ease;
+  }
+  .card-panel:hover {
+    border-color: rgba(56, 189, 248, 0.4);
+  }
+
+  .card-header {
+    padding: 14px 20px;
+    background: rgba(28, 38, 58, 0.5);
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .agent-tag {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .agent-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+  }
+  .agent-action {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .card-timecode {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    background: rgba(0,0,0,0.3);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .card-content {
+    padding: 20px;
+  }
+
+  .finding-text {
+    font-size: 15px;
+    font-weight: 500;
+    color: #ffffff;
+    line-height: 1.6;
+  }
+
+  .meta-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .meta-pills strong { color: var(--accent-blue); }
+
+  /* Interactive candidate bars */
+  .candidate-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+  }
+  .candidate-table th {
+    text-align: left;
+    color: var(--text-muted);
+    padding: 8px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .candidate-table td {
+    padding: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .candidate-table tr.blamed td {
+    color: var(--accent-amber);
+    background: rgba(245, 158, 11, 0.05);
+    font-weight: 600;
+  }
+
+  .meter-bg {
+    width: 100%;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+    border-radius: 3px;
+  }
+
+  .frames-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .frame-thumb {
+    position: relative;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    transition: transform 0.2s ease;
+  }
+  .frame-thumb:hover { transform: scale(1.03); }
+  .frame-thumb img { width: 100%; display: block; }
+
+  details {
+    margin-top: 12px;
+  }
+  summary {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  summary:hover { color: var(--accent-blue); }
+
+  pre.code-block {
+    background: #04060a;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #94a3b8;
+    overflow-x: auto;
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  .runbook-list {
+    margin-top: 12px;
+    padding-left: 20px;
+    font-size: 13.5px;
+    color: #e2e8f0;
+    line-height: 1.7;
+  }
+  .runbook-list li { margin-bottom: 4px; }
+
+  @media (max-width: 768px) {
+    header { padding: 12px 16px; }
+    .spine-container { padding-left: 0; }
+    .spine-container::before, .step-dot { display: none; }
+    .btn-roll { width: 100%; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-group">
+    <div class="brand-logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <div class="brand-title">
+      <h1>The Control Room</h1>
+      <p>THE CHAMPIONSHIP FINAL · LIVE BROADCAST ENGINE</p>
+    </div>
+  </div>
+
+  <div class="status-cluster">
+    <div class="status-indicator">
+      <span class="lamp standby" id="statusLamp"></span>
+      <span id="statusText">STANDBY</span>
+    </div>
+    <span class="mode-badge" id="modeBadge" hidden>INITIALIZING</span>
+  </div>
+
+  <button class="btn-roll" id="rollBtn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    Roll Cameras
+  </button>
+</header>
+
+<!-- KPI Summary Ribbon -->
+<div class="kpi-ribbon">
+  <div class="kpi-card">
+    <div class="kpi-label">Active Concurrents</div>
+    <div class="kpi-value">2,140,000</div>
+    <div class="kpi-sub">Peak OTT stream payload</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Incident Severity</div>
+    <div class="kpi-value" id="kpiSeverity">—</div>
+    <div class="kpi-sub" id="kpiSeveritySub">Telemetry standby</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Root Cause Slice</div>
+    <div class="kpi-value" id="kpiCulprit" style="font-size:18px;">—</div>
+    <div class="kpi-sub" id="kpiCulpritSub">Detection pending</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Revenue at Risk</div>
+    <div class="kpi-value alert" id="kpiRevenue">$0.00</div>
+    <div class="kpi-sub">Estimated churn exposure</div>
+  </div>
+</div>
+
+<main>
+  <div class="spine-container" id="spineContainer">
+    <div class="empty-slate" id="emptySlate">
+      <h3>No Active Incident Audit Open</h3>
+      <p>Click <strong>Roll Cameras</strong> above to run a 6-agent deterministic sweep over playback telemetry.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+const AGENTS = {
+  watcher:       "Watcher",
+  diagnostician: "Diagnostician",
+  eyewitness:    "Eyewitness",
+  impact:        "Impact",
+  action:        "Action",
+  continuity:    "Continuity",
+  system:        "System"
+};
+
+const rollBtn = document.getElementById('rollBtn');
+const statusLamp = document.getElementById('statusLamp');
+const statusText = document.getElementById('statusText');
+const modeBadge = document.getElementById('modeBadge');
+const spineContainer = document.getElementById('spineContainer');
+
+const kpiSeverity = document.getElementById('kpiSeverity');
+const kpiSeveritySub = document.getElementById('kpiSeveritySub');
+const kpiCulprit = document.getElementById('kpiCulprit');
+const kpiCulpritSub = document.getElementById('kpiCulpritSub');
+const kpiRevenue = document.getElementById('kpiRevenue');
+
+let startTime = 0;
+
+fetch('/api/mode').then(r => r.json()).then(m => {
+  modeBadge.textContent = `${m.database} · ${m.reasoning}`;
+  modeBadge.hidden = false;
+}).catch(() => {});
+
+function formatTC(ms) {
+  const s = Math.floor(ms / 1000) % 60;
+  const m = Math.floor(ms / 60000) % 60;
+  const h = Math.floor(ms / 3600000);
+  const p = n => String(n).padStart(2,'0');
+  return `${p(h)}:${p(m)}:${p(s)}`;
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function buildTable(rows, blameKey) {
+  if (!rows || !rows.length) return '';
+  const cols = Object.keys(rows[0]);
+  const head = cols.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+  const body = rows.slice(0, 8).map((r, i) => {
+    const isBlamed = i === 0 && blameKey;
+    const epVal = r['explanatory_power'] ?? r['ep'];
+    const bar = epVal !== undefined ? `
+      <div class="meter-bg"><div class="meter-fill" style="width:${Math.min(floatVal(epVal)*100, 100)}%;"></div></div>
+    ` : '';
+    return `<tr class="${isBlamed ? 'blamed' : ''}">
+      ${cols.map(c => `<td>${c === 'explanatory_power' || c === 'ep' ? `${escapeHtml(r[c])} ${bar}` : escapeHtml(r[c])}</td>`).join('')}
+    </tr>`;
+  }).join('');
+  return `<table class="candidate-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function floatVal(v) { return parseFloat(v) || 0; }
+
+function renderCardDetails(step) {
+  const r = step.result || {};
+  let html = '';
+
+  if (step.agent === 'diagnostician' && r.blame) {
+    if (r.ranked) {
+      html += `<details open><summary>Candidates Ranked by Explanatory Power & Surprise</summary>${buildTable(r.ranked, true)}</details>`;
+    }
+    for (const [dim, rows] of Object.entries(r.blame)) {
+      html += `<details ${dim === r.culprit_dim ? 'open' : ''}><summary>Attribution Breakdown: ${escapeHtml(dim)}</summary>${buildTable(rows, true)}</details>`;
+    }
+  }
+  if (step.agent === 'eyewitness' && r.frames?.length) {
+    html += `<div class="frames-gallery">${r.frames.map(f => `
+      <div class="frame-thumb"><img alt="Sampled video frame" src="${f}"></div>
+    `).join('')}</div>`;
+  }
+  if (step.agent === 'impact') {
+    html += buildTable([r]);
+  }
+  if (step.agent === 'action') {
+    if (r.runbook_steps) {
+      html += `<ol class="runbook-list">${r.runbook_steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>`;
+    }
+    if (r.status_page_post) {
+      html += `<details><summary>Viewer-Facing Status Post</summary><pre class="code-block">${escapeHtml(r.status_page_post)}</pre></details>`;
+    }
+  }
+  if (step.sql_executed || r.sql) {
+    html += `<details><summary>ClickHouse SQL Query Executed</summary><pre class="code-block">${escapeHtml(step.sql_executed || r.sql)}</pre></details>`;
+  }
+  return html;
+}
+
+function appendStepNode(step) {
+  document.getElementById('emptySlate')?.remove();
+  const node = document.createElement('div');
+  node.className = `step-node ${step.error ? 'err' : 'done'}`;
+
+  const metaPills = [];
+  if (step.rows_scanned) metaPills.push(`Scanned <strong>${step.rows_scanned.toLocaleString()}</strong> rows`);
+  if (step.latency_ms) metaPills.push(`Latency <strong>${step.latency_ms.toLocaleString()}</strong> ms`);
+  if (step.confidence) metaPills.push(`Confidence <strong>${(step.confidence * 100).toFixed(0)}%</strong>`);
+
+  node.innerHTML = `
+    <div class="step-dot"></div>
+    <div class="card-panel">
+      <div class="card-header">
+        <div class="agent-tag">
+          <span class="agent-name">${escapeHtml(AGENTS[step.agent] || step.agent)}</span>
+          <span class="agent-action">${escapeHtml(step.action || '')}</span>
+        </div>
+        <span class="card-timecode">T+${formatTC(Date.now() - startTime)}</span>
+      </div>
+      <div class="card-content">
+        <p class="finding-text">${escapeHtml(step.error || step.finding)}</p>
+        ${metaPills.length ? `<div class="meta-pills">${metaPills.join(' &bull; ')}</div>` : ''}
+        ${renderCardDetails(step)}
+      </div>
+    </div>
+  `;
+  spineContainer.appendChild(node);
+  node.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+rollBtn.addEventListener('click', async () => {
+  spineContainer.innerHTML = '';
+  startTime = Date.now();
+  rollBtn.disabled = true;
+  statusLamp.className = 'lamp live';
+  statusText.textContent = 'SWEEPING TELEMETRY';
+
+  kpiSeverity.textContent = 'SWEEPING';
+  kpiSeverity.className = 'kpi-value';
+  kpiCulprit.textContent = 'ANALYZING';
+  kpiRevenue.textContent = '$0.00';
+
+  try {
+    const res = await fetch('/api/run', { method: 'POST' });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop();
+
+      for (const chunk of chunks) {
+        if (!chunk.startsWith('data: ')) continue;
+        const step = JSON.parse(chunk.slice(6));
+        if (step.done) {
+          statusLamp.className = 'lamp ok';
+          statusText.textContent = step.culprit ? `CULPRIT FOUND: ${step.culprit}` : 'ALL CLEAR';
+          if (step.severity) {
+            kpiSeverity.textContent = step.severity.toUpperCase();
+            kpiSeverity.className = 'kpi-value alert';
+          }
+          if (step.culprit) {
+            kpiCulprit.textContent = step.culprit;
+            kpiCulpritSub.textContent = `Status: ${step.final_status || 'mitigated'}`;
+          }
+          if (step.revenue_at_risk) {
+            kpiRevenue.textContent = `$${parseFloat(step.revenue_at_risk).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+          }
+        } else {
+          appendStepNode(step);
+        }
+      }
+    }
+  } catch (err) {
+    appendStepNode({ agent: 'system', action: 'run error', error: err.message });
+    statusLamp.className = 'lamp standby';
+    statusText.textContent = 'RUN STOPPED';
+  } finally {
+    rollBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
