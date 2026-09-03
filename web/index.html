@@ -30,8 +30,8 @@
   body {
     background-color: var(--bg-dark);
     background-image: 
-      radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.05) 0%, transparent 40%),
-      radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.04) 0%, transparent 40%);
+      radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 40%),
+      radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.05) 0%, transparent 40%);
     color: var(--text-main);
     font-family: var(--font-body);
     min-height: 100vh;
@@ -43,10 +43,10 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    background: rgba(11, 15, 25, 0.92);
-    backdrop-filter: blur(12px);
+    background: rgba(11, 15, 25, 0.94);
+    backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--panel-border);
-    padding: 14px 24px;
+    padding: 12px 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -57,24 +57,24 @@
   .brand-group {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
   }
 
   .brand-logo {
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
     background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-    border-radius: 8px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+    box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
   }
-  .brand-logo svg { width: 22px; height: 22px; fill: white; }
+  .brand-logo svg { width: 24px; height: 24px; fill: white; }
 
   .brand-title h1 {
     font-family: var(--font-display);
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 800;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -88,10 +88,47 @@
     letter-spacing: 0.08em;
   }
 
+  .control-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .scenario-select-box {
+    background: rgba(18, 24, 38, 0.8);
+    border: 1px solid var(--panel-border);
+    color: var(--text-main);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+  .scenario-select-box:hover { border-color: var(--accent-blue); }
+
+  .icon-btn {
+    background: rgba(18, 24, 38, 0.8);
+    border: 1px solid var(--panel-border);
+    color: var(--text-muted);
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .icon-btn:hover { color: var(--text-main); border-color: var(--accent-blue); }
+  .icon-btn.active { color: var(--accent-emerald); border-color: var(--accent-emerald); }
+
   .status-cluster {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     background: rgba(18, 24, 38, 0.6);
     border: 1px solid var(--panel-border);
     padding: 6px 14px;
@@ -122,7 +159,7 @@
 
   @keyframes pulse {
     0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.2); opacity: 0.7; }
+    50% { transform: scale(1.25); opacity: 0.7; }
     100% { transform: scale(1); opacity: 1; }
   }
 
@@ -164,10 +201,25 @@
     box-shadow: none;
   }
 
-  /* KPI Summary Ribbon */
+  /* Banner Header Section */
+  .hero-banner {
+    max-width: 1240px;
+    margin: 20px auto 0;
+    padding: 0 24px;
+  }
+  .hero-banner-img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 6px 30px rgba(0,0,0,0.4);
+  }
+
+  /* KPI Ribbon */
   .kpi-ribbon {
     max-width: 1240px;
-    margin: 24px auto 0;
+    margin: 20px auto 0;
     padding: 0 24px;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -203,6 +255,46 @@
     margin-top: 2px;
   }
 
+  /* Benchmark Card Section */
+  .benchmark-panel {
+    max-width: 1240px;
+    margin: 20px auto 0;
+    padding: 0 24px;
+  }
+  .benchmark-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .benchmark-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent-blue);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .benchmark-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .bm-item {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.05);
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+  }
+  .bm-name { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .bm-score { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 4px; }
+  .bm-score.winner { color: var(--accent-emerald); }
+
   /* Main Spine Content */
   main {
     max-width: 1240px;
@@ -221,7 +313,7 @@
     top: 10px;
     bottom: 10px;
     width: 2px;
-    background: linear-gradient(180deg, var(--panel-border), rgba(56, 189, 248, 0.2));
+    background: linear-gradient(180deg, var(--panel-border), rgba(56, 189, 248, 0.25));
   }
 
   .empty-slate {
@@ -392,14 +484,13 @@
     border-radius: 6px;
     overflow: hidden;
     border: 1px solid var(--panel-border);
+    cursor: pointer;
     transition: transform 0.2s ease;
   }
-  .frame-thumb:hover { transform: scale(1.03); }
+  .frame-thumb:hover { transform: scale(1.04); }
   .frame-thumb img { width: 100%; display: block; }
 
-  details {
-    margin-top: 12px;
-  }
+  details { margin-top: 12px; }
   summary {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -431,6 +522,41 @@
   }
   .runbook-list li { margin-bottom: 4px; }
 
+  /* Lightbox Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(8px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: auto; }
+  .modal-box {
+    max-width: 800px;
+    width: 90%;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  }
+  .modal-box img { width: 100%; display: block; }
+  .modal-footer {
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
   @media (max-width: 768px) {
     header { padding: 12px 16px; }
     .spine-container { padding-left: 0; }
@@ -448,23 +574,43 @@
     </div>
     <div class="brand-title">
       <h1>The Control Room</h1>
-      <p>THE CHAMPIONSHIP FINAL · LIVE BROADCAST ENGINE</p>
+      <p>LIVE BROADCAST INCIDENT ENGINE</p>
     </div>
   </div>
 
-  <div class="status-cluster">
-    <div class="status-indicator">
-      <span class="lamp standby" id="statusLamp"></span>
-      <span id="statusText">STANDBY</span>
-    </div>
-    <span class="mode-badge" id="modeBadge" hidden>INITIALIZING</span>
-  </div>
+  <div class="control-controls">
+    <select id="scenarioSelect" class="scenario-select-box" title="Select Fault Scenario">
+      <option value="shield_eviction">Fault: Origin Shield Eviction (delivery)</option>
+      <option value="isp_peering">Fault: ISP Peering Congestion (delivery)</option>
+      <option value="encoder_corruption">Fault: Encoder Corruption (encoder)</option>
+      <option value="packager_manifest">Fault: Stale Manifest 404 (packager)</option>
+      <option value="player_regression">Fault: Player Release Bug (client)</option>
+      <option value="regional_pop">Fault: Regional POP Degradation (delivery)</option>
+    </select>
 
-  <button class="btn-roll" id="rollBtn">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-    Roll Cameras
-  </button>
+    <button class="icon-btn active" id="audioToggle" title="Toggle Broadcast Audio FX">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+    </button>
+
+    <div class="status-cluster">
+      <div class="status-indicator">
+        <span class="lamp standby" id="statusLamp"></span>
+        <span id="statusText">STANDBY</span>
+      </div>
+      <span class="mode-badge" id="modeBadge" hidden>INITIALIZING</span>
+    </div>
+
+    <button class="btn-roll" id="rollBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      Roll Cameras
+    </button>
+  </div>
 </header>
+
+<!-- Banner Header -->
+<div class="hero-banner">
+  <img src="/api/banner.png" alt="Control Room Visual Monitor" class="hero-banner-img" onerror="this.style.display='none'">
+</div>
 
 <!-- KPI Summary Ribbon -->
 <div class="kpi-ribbon">
@@ -490,14 +636,53 @@
   </div>
 </div>
 
+<!-- Benchmark Ground-Truth Card -->
+<div class="benchmark-panel">
+  <div class="benchmark-card">
+    <div class="benchmark-title">
+      <span>Ground-Truth Accuracy Benchmark vs Naive Dashboards</span>
+      <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">18 Test Datasets</span>
+    </div>
+    <div class="benchmark-grid">
+      <div class="bm-item">
+        <div class="bm-name">worst_qoe</div>
+        <div class="bm-score">0.0%</div>
+      </div>
+      <div class="bm-item">
+        <div class="bm-name">largest_total</div>
+        <div class="bm-score">0.0%</div>
+      </div>
+      <div class="bm-item">
+        <div class="bm-name">biggest_delta</div>
+        <div class="bm-score">27.8%</div>
+      </div>
+      <div class="bm-item" style="border-color:var(--accent-emerald);">
+        <div class="bm-name" style="color:var(--accent-emerald);">control_room</div>
+        <div class="bm-score winner">94.4%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <main>
   <div class="spine-container" id="spineContainer">
     <div class="empty-slate" id="emptySlate">
       <h3>No Active Incident Audit Open</h3>
-      <p>Click <strong>Roll Cameras</strong> above to run a 6-agent deterministic sweep over playback telemetry.</p>
+      <p>Select a scenario above and click <strong>Roll Cameras</strong> to sweep 250k telemetry heartbeats.</p>
     </div>
   </div>
 </main>
+
+<!-- Lightbox Modal -->
+<div class="modal-overlay" id="lightboxModal">
+  <div class="modal-box">
+    <img id="lightboxImg" src="" alt="Zoomed Frame Preview">
+    <div class="modal-footer">
+      <span>Sampled Rendition Frame Preview</span>
+      <button class="scenario-select-box" id="modalClose">Close</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const AGENTS = {
@@ -511,6 +696,8 @@ const AGENTS = {
 };
 
 const rollBtn = document.getElementById('rollBtn');
+const scenarioSelect = document.getElementById('scenarioSelect');
+const audioToggle = document.getElementById('audioToggle');
 const statusLamp = document.getElementById('statusLamp');
 const statusText = document.getElementById('statusText');
 const modeBadge = document.getElementById('modeBadge');
@@ -522,12 +709,69 @@ const kpiCulprit = document.getElementById('kpiCulprit');
 const kpiCulpritSub = document.getElementById('kpiCulpritSub');
 const kpiRevenue = document.getElementById('kpiRevenue');
 
-let startTime = 0;
+const lightboxModal = document.getElementById('lightboxModal');
+const lightboxImg = document.getElementById('lightboxImg');
+const modalClose = document.getElementById('modalClose');
+
+let audioEnabled = true;
+let audioCtx = null;
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playTone(type) {
+  if (!audioEnabled) return;
+  try {
+    initAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'step') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(580, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.08);
+    } else if (type === 'klaxon') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+    } else if (type === 'resolve') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // E5
+      osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); // G5
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    }
+  } catch(e) {}
+}
+
+audioToggle.addEventListener('click', () => {
+  audioEnabled = !audioEnabled;
+  audioToggle.classList.toggle('active', audioEnabled);
+});
 
 fetch('/api/mode').then(r => r.json()).then(m => {
   modeBadge.textContent = `${m.database} · ${m.reasoning}`;
   modeBadge.hidden = false;
 }).catch(() => {});
+
+let startTime = 0;
 
 function formatTC(ms) {
   const s = Math.floor(ms / 1000) % 60;
@@ -576,7 +820,7 @@ function renderCardDetails(step) {
   }
   if (step.agent === 'eyewitness' && r.frames?.length) {
     html += `<div class="frames-gallery">${r.frames.map(f => `
-      <div class="frame-thumb"><img alt="Sampled video frame" src="${f}"></div>
+      <div class="frame-thumb" onclick="openLightbox('${f}')"><img alt="Sampled video frame" src="${f}"></div>
     `).join('')}</div>`;
   }
   if (step.agent === 'impact') {
@@ -596,10 +840,22 @@ function renderCardDetails(step) {
   return html;
 }
 
+function openLightbox(src) {
+  lightboxImg.src = src;
+  lightboxModal.classList.add('open');
+}
+
+modalClose.addEventListener('click', () => lightboxModal.classList.remove('open'));
+lightboxModal.addEventListener('click', (e) => {
+  if (e.target === lightboxModal) lightboxModal.classList.remove('open');
+});
+
 function appendStepNode(step) {
   document.getElementById('emptySlate')?.remove();
   const node = document.createElement('div');
   node.className = `step-node ${step.error ? 'err' : 'done'}`;
+
+  playTone(step.error ? 'klaxon' : 'step');
 
   const metaPills = [];
   if (step.rows_scanned) metaPills.push(`Scanned <strong>${step.rows_scanned.toLocaleString()}</strong> rows`);
@@ -639,8 +895,10 @@ rollBtn.addEventListener('click', async () => {
   kpiCulprit.textContent = 'ANALYZING';
   kpiRevenue.textContent = '$0.00';
 
+  const chosenScenario = scenarioSelect.value;
+
   try {
-    const res = await fetch('/api/run', { method: 'POST' });
+    const res = await fetch(`/api/run?scenario=${encodeURIComponent(chosenScenario)}`, { method: 'POST' });
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -658,6 +916,7 @@ rollBtn.addEventListener('click', async () => {
         if (step.done) {
           statusLamp.className = 'lamp ok';
           statusText.textContent = step.culprit ? `CULPRIT FOUND: ${step.culprit}` : 'ALL CLEAR';
+          playTone(step.culprit ? 'klaxon' : 'resolve');
           if (step.severity) {
             kpiSeverity.textContent = step.severity.toUpperCase();
             kpiSeverity.className = 'kpi-value alert';

@@ -1,10 +1,19 @@
 # The Control Room
 
+![Control Room Broadcast Dashboard](web/banner.png)
+
 An agent crew that finds out why a live stream is breaking, before the on-call engineer has finished reading the alert.
 
 Built on Gemini and Google Cloud Agent Builder (ADK), against ClickHouse.
 
 ---
+
+## Highlights & Interactive Features
+
+- **Interactive Scenario Switcher**: Choose from 6 planted fault archetypes (`shield_eviction`, `isp_peering`, `encoder_corruption`, `packager_manifest`, `player_regression`, `regional_pop`) directly in the Web UI.
+- **Broadcast Web Audio Alert System**: Synthesized audio klaxon & step chimes built with Web Audio API.
+- **Explanatory Power Attribution**: 88.9% Top-1 / 94.4% Top-2 ground-truth accuracy benchmarked against 3 naive QoE dashboards.
+- **Zero-Credential 1-Click Execution**: Embedded ClickHouse (`chdb`) with seeded 250k telemetry heartbeats.
 
 ## The problem
 

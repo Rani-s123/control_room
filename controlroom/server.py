@@ -31,10 +31,37 @@ def healthz() -> dict:
         raise HTTPException(503, f"ClickHouse unreachable: {exc}")
 
 
+@app.get("/api/scenarios")
+def list_scenarios() -> dict:
+    """Return all telemetry fault scenarios with ground truth labels."""
+    from data.scenarios import SCENARIOS
+    return {
+        "scenarios": [
+            {
+                "key": s.key,
+                "label": s.label,
+                "fault_dim": s.fault_dim,
+                "fault_value": s.fault_value,
+                "fault_domain": s.fault_domain,
+                "artifact": s.artifact,
+            }
+            for s in SCENARIOS.values()
+        ]
+    }
+
+
+@app.get("/api/banner.png")
+def get_banner() -> FileResponse:
+    banner_path = WEB / "banner.png"
+    if banner_path.exists():
+        return FileResponse(banner_path, media_type="image/png")
+    raise HTTPException(404, "Banner not found")
+
+
 @app.post("/api/run")
-def start_run() -> StreamingResponse:
+def start_run(scenario: str | None = None) -> StreamingResponse:
     def events():
-        for step in pipeline.stream():
+        for step in pipeline.stream(scenario_key=scenario):
             yield f"data: {json.dumps(step, default=str)}\n\n"
 
     return StreamingResponse(events(), media_type="text/event-stream",

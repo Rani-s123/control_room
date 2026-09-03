@@ -84,8 +84,13 @@ purge, player-version rollback). Return JSON:
  "exec_summary": str, "page_team": str}"""
 
 
-def run(emit: Callable[[dict], None] | None = None) -> dict:
+def run(emit: Callable[[dict], None] | None = None, scenario_key: str | None = None) -> dict:
     """Execute one full incident response. Yields/emits each step as it completes."""
+    if scenario_key:
+        os.environ["DEMO_SCENARIO"] = scenario_key
+        if ch.demo_mode():
+            ch.client.cache_clear()
+
     run_id = ch.new_run_id()
     steps: list[ch.StepLog] = []
 
@@ -181,9 +186,6 @@ def run(emit: Callable[[dict], None] | None = None) -> dict:
                       result=act))
 
     # -- 6. CONTINUITY ------------------------------------------------------
-    # An incident is not closed because an agent wrote a remediation. It is
-    # closed because the numbers came back. This step re-measures the culprit
-    # slice over the freshest minutes and reports the direction of travel.
     recheck, r_ms, r_read = ch.run_template("blame", {
         "dim": dim, "window_min": RECHECK_MIN, "baseline_min": BASELINE_MIN})
     still = next((r for r in recheck if r["slice"] == value), None)
@@ -212,7 +214,7 @@ def run(emit: Callable[[dict], None] | None = None) -> dict:
             "steps": [s.__dict__ for s in steps]}
 
 
-def stream() -> Iterator[dict]:
+def stream(scenario_key: str | None = None) -> Iterator[dict]:
     """Generator form for the SSE endpoint."""
     import queue
     import threading
@@ -222,7 +224,7 @@ def stream() -> Iterator[dict]:
 
     def worker():
         try:
-            result.update(run(emit=q.put))
+            result.update(run(emit=q.put, scenario_key=scenario_key))
         except Exception as exc:  # surfaced in the UI, not swallowed
             q.put({"agent": "system", "error": str(exc)})
         finally:
