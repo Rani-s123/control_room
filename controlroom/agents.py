@@ -3,11 +3,14 @@ The ADK surface, deployable to Vertex AI Agent Engine.
 
 `root_agent` is what a human talks to. It has two kinds of tools:
 
-  * `open_control_room` — runs the fixed five-step pipeline. This is the
-    critical path and it is deterministic.
-  * The ClickHouse MCP toolset — attached for *follow-up* questions only
-    ("was BLR1 affected too?", "show me player 3.98.2 on Fire TV"). Open-ended
-    exploration belongs here, where a wrong query costs nothing.
+  * `open_control_room` — runs the fixed six-step pipeline. Every read in it is
+    executed by the official ClickHouse MCP server, and every one of those
+    queries ships in `sql/queries/`. The transport is ClickHouse's; the
+    decisions are the pipeline's.
+  * The same ClickHouse MCP toolset, handed to the agent directly for
+    *follow-up* questions ("was BLR1 affected too?", "show me player 3.98.2 on
+    Fire TV"). Open-ended exploration belongs here, where a wrong query costs
+    nothing and the pipeline's verdict is already recorded.
 
 Deploy:
     adk deploy agent_engine --project $GOOGLE_CLOUD_PROJECT \
@@ -18,7 +21,7 @@ from __future__ import annotations
 
 import os
 
-from . import ch, pipeline
+from . import ch, mcp_client, pipeline
 
 MODEL = os.environ.get("GEMINI_REASONING_MODEL", "gemini-2.5-pro")
 
@@ -70,27 +73,33 @@ def check_slice(dimension: str, value: str, window_min: int = 20) -> dict:
 
 # --- ClickHouse MCP ---------------------------------------------------------
 
+# The query tool was renamed between releases: mcp-clickhouse 0.6 exposes
+# `run_query`, earlier versions `run_select_query`. Filtering on one name alone
+# silently leaves the agent able to list tables and unable to query anything,
+# which looks like a quiet agent rather than a broken one — so allow both and
+# let the server decide which it serves.
+MCP_TOOLS = ["list_databases", "list_tables", "run_query", "run_select_query"]
+
+
 def clickhouse_mcp():
-    """Official ClickHouse MCP server, read-only, scoped to the control_room db."""
+    """Official ClickHouse MCP server, read-only, scoped to the control_room db.
+
+    The same server the pipeline reads through (see controlroom/mcp_client.py).
+    Here it is handed to the agent for open-ended follow-up questions, where a
+    wrong query costs nothing.
+    """
     if not HAS_ADK:
         return None
     return McpToolset(
         connection_params=StdioConnectionParams(
             server_params=StdioServerParameters(
-                command="uvx",
-                args=["--from", "mcp-clickhouse", "mcp-clickhouse"],
-                env={
-                    "CLICKHOUSE_HOST": os.environ.get("CLICKHOUSE_HOST", ""),
-                    "CLICKHOUSE_PORT": os.environ.get("CLICKHOUSE_PORT", "8443"),
-                    "CLICKHOUSE_USER": os.environ.get("CLICKHOUSE_USER", "default"),
-                    "CLICKHOUSE_PASSWORD": os.environ.get("CLICKHOUSE_PASSWORD", ""),
-                    "CLICKHOUSE_SECURE": os.environ.get("CLICKHOUSE_SECURE", "true"),
-                    "CLICKHOUSE_DATABASE": "control_room",
-                },
+                command=mcp_client.server_command()[0],
+                args=mcp_client.server_command()[1:],
+                env=mcp_client.server_env(),
             ),
             timeout=30,
         ),
-        tool_filter=["list_tables", "run_select_query"],
+        tool_filter=MCP_TOOLS,
     )
 
 

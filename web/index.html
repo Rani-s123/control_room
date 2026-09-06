@@ -294,6 +294,28 @@
   .bm-name { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
   .bm-score { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 4px; }
   .bm-score.winner { color: var(--accent-emerald); }
+  .bm-score-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .bm-secondary {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .bm-footnote {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin-top: 12px;
+  }
 
   /* Main Spine Content */
   main {
@@ -579,6 +601,8 @@
   </div>
 
   <div class="control-controls">
+    <!-- Repopulated from /api/scenarios on load, so this list can never drift
+         from data/scenarios.py. The options below are the fallback. -->
     <select id="scenarioSelect" class="scenario-select-box" title="Select Fault Scenario">
       <option value="shield_eviction">Fault: Origin Shield Eviction (delivery)</option>
       <option value="isp_peering">Fault: ISP Peering Congestion (delivery)</option>
@@ -617,7 +641,7 @@
   <div class="kpi-card">
     <div class="kpi-label">Active Concurrents</div>
     <div class="kpi-value">2,140,000</div>
-    <div class="kpi-sub">Peak OTT stream payload</div>
+    <div class="kpi-sub">Illustrative broadcast scale — not measured</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Incident Severity</div>
@@ -640,26 +664,43 @@
 <div class="benchmark-panel">
   <div class="benchmark-card">
     <div class="benchmark-title">
-      <span>Ground-Truth Accuracy Benchmark vs Naive Dashboards</span>
-      <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">18 Test Datasets</span>
+      <span>Ground-Truth Accuracy vs Naive Dashboards</span>
+      <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">TOP-1 · 66 TEST DATASETS</span>
     </div>
     <div class="benchmark-grid">
       <div class="bm-item">
         <div class="bm-name">worst_qoe</div>
         <div class="bm-score">0.0%</div>
+        <div class="bm-score-label">top-1</div>
+        <div class="bm-secondary">top-2 0.0%</div>
       </div>
       <div class="bm-item">
         <div class="bm-name">largest_total</div>
         <div class="bm-score">0.0%</div>
+        <div class="bm-score-label">top-1</div>
+        <div class="bm-secondary">top-2 0.0%</div>
       </div>
       <div class="bm-item">
         <div class="bm-name">biggest_delta</div>
-        <div class="bm-score">27.8%</div>
+        <div class="bm-score">37.9%</div>
+        <div class="bm-score-label">top-1</div>
+        <div class="bm-secondary">top-2 43.9%</div>
       </div>
       <div class="bm-item" style="border-color:var(--accent-emerald);">
         <div class="bm-name" style="color:var(--accent-emerald);">control_room</div>
-        <div class="bm-score winner">94.4%</div>
+        <div class="bm-score winner">93.9%</div>
+        <div class="bm-score-label">top-1</div>
+        <div class="bm-secondary">top-2 98.5%</div>
       </div>
+    </div>
+    <div class="bm-footnote">
+      Top-1 is the headline: the culprit named first. Top-2 is shown beside it
+      because the culprit and the cohort it hurts most go into the same page, so
+      a run that ranks them the wrong way round still hands the on-call engineer
+      the right slice. Measured by <code>evals/run_eval.py</code> over 11 seeds &times;
+      6 fault archetypes; the surprise weight was fitted on 3 of those seeds and
+      the other 8 are held out. Reproduce with
+      <code>python evals/run_eval.py --trials 3</code>.
     </div>
   </div>
 </div>
@@ -769,6 +810,19 @@ audioToggle.addEventListener('click', () => {
 fetch('/api/mode').then(r => r.json()).then(m => {
   modeBadge.textContent = `${m.database} · ${m.reasoning}`;
   modeBadge.hidden = false;
+}).catch(() => {});
+
+// The scenario list is owned by data/scenarios.py, not by this file.
+fetch('/api/scenarios').then(r => r.json()).then(s => {
+  if (!s.scenarios || !s.scenarios.length) return;
+  const previous = scenarioSelect.value;
+  scenarioSelect.innerHTML = s.scenarios.map(sc => {
+    const opt = document.createElement('option');
+    opt.value = sc.key;
+    opt.textContent = `Fault: ${sc.label} (${sc.fault_domain})`;
+    return opt.outerHTML;
+  }).join('');
+  if (s.scenarios.some(sc => sc.key === previous)) scenarioSelect.value = previous;
 }).catch(() => {});
 
 let startTime = 0;

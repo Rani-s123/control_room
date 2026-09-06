@@ -6,4 +6,8 @@ uvicorn[standard]>=0.30.0
 numpy>=1.26.0
 Pillow>=10.0.0
 mcp>=1.9.0
+# The official ClickHouse MCP server. Installed rather than fetched with uvx at
+# runtime, so a Cloud Run container has it in the image and the read path does
+# not depend on a network call to start.
+mcp-clickhouse>=0.6.0
 chdb>=3.0.0

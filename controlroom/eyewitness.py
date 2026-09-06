@@ -12,8 +12,19 @@ Gemini look at them.
 
 Frame source, in order of preference:
   1. THUMBNAIL_BASE_URL — your packager's sprite/thumbnail endpoint.
-  2. A local fixture set under data/frames/ (used by the demo, so the run works
-     with no live origin attached).
+  2. A local fixture set under data/frames/.
+  3. In demo mode only, frames rendered by the simulated origin below.
+
+On the third path the frames are drawn to match the fault the telemetry
+generator planted, because the same simulated world produces both — exactly as
+a real origin serves pictures that match what its encoder actually did. Every
+frame carries a SIMULATED ORIGIN slate so nobody mistakes one for a capture,
+and the run log records the source. The agent is never told which scenario is
+loaded; it only ever sees the pixels.
+
+Outside demo mode nothing is synthesised. With no origin and no fixtures the
+Eyewitness reports that it had no frames, rather than inventing a picture and
+letting a verdict rest on it.
 """
 
 from __future__ import annotations
@@ -48,39 +59,70 @@ def _from_fixtures(n: int) -> list[bytes]:
     return [f.read_bytes() for f in files[:n]]
 
 
+def _planted_artifact() -> str:
+    """What the simulated origin is actually emitting right now.
+
+    Demo mode plants a fault in the telemetry; the picture has to agree with it.
+    Reading the loaded scenario here — inside the fake origin, not inside the
+    agent — is the same move the generator makes when it plants error codes and
+    dropped frames. Returns clean | corrupt | frozen | black.
+    """
+    try:
+        from data.scenarios import DEFAULT, SCENARIOS
+        return SCENARIOS[os.environ.get("DEMO_SCENARIO", DEFAULT)].artifact
+    except Exception:
+        return "clean"
+
+
 def _synthesize(n: int) -> list[bytes]:
-    """Last resort so a fresh clone still runs: render frames that show the
-    artefact class described by the telemetry (blocky 16x16 macroblock damage)."""
+    """Render frames from the simulated origin, showing whatever artefact the
+    loaded scenario planted. A delivery fault produces an intact picture that
+    simply stops arriving; an encoder fault produces visible damage. Getting
+    this wrong is not cosmetic — it is the evidence the Eyewitness pages a team
+    on, and frames that always showed macroblocking sent every scenario to the
+    encoder team."""
     try:
         from PIL import Image, ImageDraw
     except ImportError:
         return []
     import random
+
+    artifact = _planted_artifact()
     rnd = random.Random(7)
     out = []
     for k in range(n):
         img = Image.new("RGB", (640, 360), (14, 18, 24))
         d = ImageDraw.Draw(img)
-        # Background grid
         for y in range(0, 360, 24):
             d.line([(0, y), (640, y)], fill=(24, 32, 44))
         for x in range(0, 640, 40):
             d.line([(x, 0), (x, 360)], fill=(24, 32, 44))
-        
-        # Slate header bar
-        d.rectangle([0, 0, 640, 28], fill=(30, 38, 52))
-        d.text((12, 6), f"FEED SAMPLE 0{k+1} | LIVE STREAM MONITOR", fill=(180, 195, 215))
 
-        if k % 2 == 1:  # damaged frame
-            d.rectangle([12, 36, 180, 56], fill=(180, 40, 40))
-            d.text((20, 40), "MACROBLOCK FAIL", fill=(255, 255, 255))
+        d.rectangle([0, 0, 640, 28], fill=(30, 38, 52))
+        d.text((12, 6), f"SIMULATED ORIGIN | FEED SAMPLE 0{k + 1} | T+{k * 2}s",
+               fill=(180, 195, 215))
+
+        if artifact == "corrupt" and k % 2 == 1:
+            # Corrupt slices: blocky 16x16 damage across the lower two thirds.
             for _ in range(60):
                 x, y = rnd.randrange(0, 624, 16), rnd.randrange(60, 344, 16)
                 d.rectangle([x, y, x + 16, y + 16],
                             fill=(rnd.randrange(255), rnd.randrange(255), rnd.randrange(255)))
+        elif artifact == "frozen" and k > 0:
+            # Stale manifest: every later frame is a duplicate of the first,
+            # with the clock stuck where playback stopped advancing.
+            d.rectangle([0, 0, 640, 28], fill=(30, 38, 52))
+            d.text((12, 6), "SIMULATED ORIGIN | FEED SAMPLE 01 | T+0s", fill=(180, 195, 215))
+            for i in range(6):
+                d.rectangle([80 + i * 80, 150, 140 + i * 80, 210], fill=(46, 58, 78))
+        elif artifact == "black":
+            d.rectangle([0, 28, 640, 360], fill=(0, 0, 0))
         else:
-            d.rectangle([12, 36, 120, 56], fill=(40, 160, 100))
-            d.text((20, 40), "INTACT 1080p", fill=(255, 255, 255))
+            # Intact picture: a stable test pattern. Viewers stalling on this
+            # are waiting for segments, not looking at damage.
+            for i in range(6):
+                d.rectangle([80 + i * 80, 150, 140 + i * 80, 210],
+                            fill=(46 + i * 22, 58 + i * 18, 78 + i * 14))
 
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
@@ -91,9 +133,22 @@ def _synthesize(n: int) -> list[bytes]:
 def inspect_frames(dim: str, value: str, forensics: list[dict], n: int = 4) -> dict:
     started = time.perf_counter()
 
-    frames = (_from_origin(value, n) if THUMBNAIL_BASE_URL else []) or _from_fixtures(n) or _synthesize(n)
+    from . import ch, llm
 
-    from . import llm
+    frames, source = [], "none"
+    if THUMBNAIL_BASE_URL:
+        frames = _from_origin(value, n)
+        if frames:
+            source = "origin"
+    if not frames:
+        frames = _from_fixtures(n)
+        if frames:
+            source = "fixtures"
+    if not frames and ch.demo_mode():
+        # Only the demo world invents pictures, and it labels every one.
+        frames = _synthesize(n)
+        if frames:
+            source = "simulated-origin"
 
     notes = []
     if frames and llm.credentials_present():
@@ -112,13 +167,16 @@ def inspect_frames(dim: str, value: str, forensics: list[dict], n: int = 4) -> d
         )
         notes = [ln.strip() for ln in (resp.text or "").splitlines() if ln.strip()]
     elif frames:
-        notes = [f"{len(frames)} frames captured; no vision model configured, "
-                 f"visual verdict inferred from decode telemetry instead"]
+        notes = [f"{len(frames)} frames captured from {source}; no vision model "
+                 f"configured, visual verdict inferred from decode telemetry instead"]
+    else:
+        notes = ["no frames available — set THUMBNAIL_BASE_URL or drop samples in "
+                 "data/frames/; visual verdict inferred from decode telemetry only"]
 
     return {
         "count": len(frames),
         "notes": notes,
         "latency_ms": int((time.perf_counter() - started) * 1000),
         "thumbnails": [f"data:image/jpeg;base64,{base64.b64encode(f).decode()}" for f in frames],
-        "source": "origin" if THUMBNAIL_BASE_URL else ("fixtures" if FIXTURES.exists() else "synthetic"),
+        "source": source,
     }

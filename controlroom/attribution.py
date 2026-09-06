@@ -24,6 +24,16 @@ from __future__ import annotations
 
 import os
 
+# Fitted on seed bases 0/1000/2000 only — the three datasets per archetype that
+# `evals/run_eval.py --trials 3` produces. Every later trial draws seeds this
+# weight has never seen, and the eval scores those separately, because a number
+# measured on the seeds a weight was fitted on is not a result.
+#
+# The choice is not delicate. Accuracy is flat from about 0.4 to 0.7 on both the
+# fitted and the held-out seeds, and only falls away below 0.3, where
+# explanatory power carries the ranking with no tiebreak at all, and above 1.0,
+# where the tiebreak starts outvoting containment. Sitting mid-plateau is what
+# makes it safe to leave this alone.
 SURPRISE_WEIGHT = float(os.environ.get("SURPRISE_WEIGHT", 0.6))
 
 

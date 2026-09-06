@@ -44,6 +44,24 @@ EVENT_W = np.array([0.70, 0.06, 0.05, 0.06, 0.01, 0.05, 0.04, 0.03])
 PLAYER_VERSIONS = np.array(["4.12.0", "4.11.3", "4.10.9", "3.98.2"])
 PLAYER_W = np.array([0.55, 0.28, 0.12, 0.05])
 
+# How hard a planted fault bites. One pair of constants for all six archetypes —
+# no per-scenario knobs, so no scenario can be quietly tuned until it passes.
+# The fault slice stalls more often than it should; the cohort it hits hardest
+# stalls more often still, which is what keeps "the cause" and "who suffers
+# most" genuinely different slices.
+#
+# 0.01 is the smallest value at which the planted fault is reliably present in
+# the per-minute aggregate for all six archetypes. Below it, the smaller slices
+# (region=DE-BE is 6% of traffic) sit inside noise: the "incident" window can
+# show the fault slice stalling *less* than its own baseline, and then there is
+# no cause in the data for anything to find. `--sweep-severity` in the eval
+# reports accuracy across this whole range, down to that floor.
+#
+# Still deliberately subtle — the confounder below stalls 30% of the time and
+# always has, and it dwarfs every planted fault in absolute terms.
+FAULT_REBUFFER_PROBABILITY = 0.01
+AMPLIFIER_REBUFFER_PROBABILITY = 0.12
+
 COLUMNS = ["ts", "session_id", "user_id", "event_type", "content_id", "content_title", "is_live",
            "cdn", "pop", "isp", "asn", "country", "region", "device_type", "os", "player_version",
            "rendition", "bitrate_kbps", "startup_ms", "rebuffer_ms", "dropped_frames",
@@ -81,8 +99,18 @@ def build_batch(n, t_start, t_end, incident_from, scenario: Scenario, seed=None)
 
     # Events are decided first, including forced stalls, so that stall duration
     # is only ever attached to rows that are actually rebuffer events.
+    #
+    # A fault raises the stall RATE across the whole slice it hits, and the
+    # cohort it hits hardest stalls harder still. Both draws matter: without the
+    # first one the fault slice only ever got *longer* stalls on the stalls it
+    # would have had anyway, so its excess scaled with its own baseline rate.
+    # For a small slice — region=DE-BE is 6% of traffic — that landed inside
+    # noise, and the only slice actually carrying the fault was the amplifier
+    # subset. The attribution was then being asked to find a cause the data had
+    # never contained.
     event = np.where(confounded & (rng.random(n) < CONFOUNDER["rebuffer_probability"]), "rebuffer", event)
-    event = np.where(hit_hard & (rng.random(n) < 0.12), "rebuffer", event)
+    event = np.where(hit & (rng.random(n) < FAULT_REBUFFER_PROBABILITY), "rebuffer", event)
+    event = np.where(hit_hard & (rng.random(n) < AMPLIFIER_REBUFFER_PROBABILITY), "rebuffer", event)
 
     is_stall = event == "rebuffer"
     lo, hi = CONFOUNDER["extra_rebuffer_ms"]
@@ -131,9 +159,15 @@ def main() -> None:
     ap.add_argument("--window-min", type=int, default=180)
     ap.add_argument("--incident-start-min-ago", type=int, default=22)
     ap.add_argument("--scenario", default=DEFAULT, choices=list(SCENARIOS))
+    global FAULT_REBUFFER_PROBABILITY
+
     ap.add_argument("--batch", type=int, default=250_000)
+    ap.add_argument("--fault-severity", type=float, default=FAULT_REBUFFER_PROBABILITY,
+                    help="extra probability that an event in the fault slice stalls")
     ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
+
+    FAULT_REBUFFER_PROBABILITY = args.fault_severity
 
     if args.list:
         for s in SCENARIOS.values():

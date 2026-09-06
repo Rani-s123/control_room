@@ -62,12 +62,34 @@ def ask(role: str, system: str, payload: dict, model: str) -> dict:
 def _watcher(p: dict) -> dict:
     flagged = p.get("flagged", 0)
     worst = max((m.get("z_score", 0) for m in p.get("minutes", [])), default=0)
+    alarms = p.get("slice_alarms") or []
+
+    if flagged:
+        return {
+            "is_incident": True,
+            "severity": "sev1" if flagged >= 5 else "sev2" if flagged >= 2 else "sev3",
+            "headline": (f"Rebuffering above baseline for {flagged} of the last minutes, "
+                         f"peak z-score {worst}"),
+            "confidence": min(0.5 + 0.1 * flagged, 0.95),
+        }
+    if alarms:
+        # Contained fault: the all-up average never moved, but a slice has sat
+        # well above its own baseline for the whole window.
+        top = alarms[0]
+        return {
+            "is_incident": True,
+            "severity": "sev2" if len(alarms) > 1 else "sev3",
+            "headline": (f"All-up rebuffering within variance, but {top['dim']}="
+                         f"{top['slice']} ran {top.get('mean_z')}σ above its own baseline "
+                         f"across the window ({len(alarms)} slice"
+                         f"{'s' if len(alarms) > 1 else ''} alarming)"),
+            "confidence": 0.7,
+        }
     return {
-        "is_incident": flagged > 0,
-        "severity": "sev1" if flagged >= 5 else "sev2" if flagged >= 2 else "sev3",
-        "headline": (f"Rebuffering above baseline for {flagged} of the last minutes, "
-                     f"peak z-score {worst}") if flagged else "Within normal variance",
-        "confidence": min(0.5 + 0.1 * flagged, 0.95),
+        "is_incident": False,
+        "severity": "sev3",
+        "headline": "Within normal variance, all-up and per slice",
+        "confidence": 0.6,
     }
 
 
@@ -87,14 +109,50 @@ def _diagnostician(p: dict) -> dict:
 
 
 def _eyewitness(p: dict) -> dict:
-    dropped = sum(int(f.get("dropped_frames", 0)) for f in p.get("forensics", []))
-    codes = {c for f in p.get("forensics", []) for c in (f.get("error_codes") or [])}
-    if dropped > 400 or "DECODE_FAIL" in codes:
+    """Offline stand-in for the vision step.
+
+    With no model to look at the frames, the only evidence left is decode
+    telemetry and error codes, so this reads those. It is shallow on purpose and
+    labelled `offline-stub` everywhere it appears — but it has to be able to
+    reach all four fault domains, or a whole class of incident can never be
+    routed to the right team. `client` used to be unreachable here: no branch
+    returned it, so a player-version regression was always paged to the CDN
+    on-call, which is the one outcome this step exists to prevent.
+    """
+    forensics = p.get("forensics") or []
+    profile = p.get("error_profile") or []
+
+    # Median dropped frames per session, not the sum. A sum grows with however
+    # many sessions happen to be sampled, so a threshold tuned on five sessions
+    # fires on everything at twenty and every incident becomes an encoder fault.
+    per_session = sorted(int(f.get("dropped_frames", 0)) for f in forensics)
+    median_dropped = per_session[len(per_session) // 2] if per_session else 0
+
+    # Likewise the dominant error code by share, not merely one that appeared.
+    # Every slice throws a scattering of every code; what identifies a fault is
+    # one code crowding out the others.
+    top_code, top_share = "", 0.0
+    if profile:
+        top = max(profile, key=lambda r: float(r.get("share") or 0))
+        top_code, top_share = top.get("error_code", ""), float(top.get("share") or 0)
+
+    if median_dropped > 100 or (top_code == "DECODE_FAIL" and top_share > 0.5):
         return {"visual_verdict": "corrupt", "fault_domain": "encoder",
-                "evidence": f"{dropped:,} dropped frames in the sampled sessions", "confidence": 0.7}
-    if "MANIFEST_404" in codes:
+                "evidence": (f"median {median_dropped} dropped frames per sampled session"
+                             + (f", {top_share:.0%} of errors are DECODE_FAIL"
+                                if top_code == "DECODE_FAIL" else "")),
+                "confidence": 0.7}
+    if top_code == "MANIFEST_404" and top_share > 0.5:
         return {"visual_verdict": "frozen", "fault_domain": "packager",
-                "evidence": "manifest errors in the sampled sessions", "confidence": 0.7}
+                "evidence": f"{top_share:.0%} of errors in this slice are MANIFEST_404",
+                "confidence": 0.7}
+    if p.get("culprit_dim") == "player_version":
+        # Picture is intact and the excess is contained inside one build. No
+        # amount of CDN failover moves a bug that ships with the player.
+        return {"visual_verdict": "clean", "fault_domain": "client",
+                "evidence": (f"picture intact, and the excess is contained inside "
+                             f"player {p.get('culprit_value')} rather than any delivery path"),
+                "confidence": 0.65}
     return {"visual_verdict": "clean", "fault_domain": "delivery",
             "evidence": "picture intact in sampled sessions; viewers are stalling, not seeing damage",
             "confidence": 0.65}

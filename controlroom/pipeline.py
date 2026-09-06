@@ -1,7 +1,7 @@
 """
 The Control Room pipeline.
 
-Five agents, always in this order, always the same five steps. Gemini decides
+Six agents, always in this order, always the same six steps. Gemini decides
 *what the evidence means*; it never decides *which evidence to collect* on the
 critical path. That is what makes a run reproducible — re-run a run_id and you
 get the same queries against the same window.
@@ -33,6 +33,16 @@ BASELINE_MIN = int(os.environ.get("BASELINE_MIN", 180))
 RECHECK_MIN = int(os.environ.get("RECHECK_MIN", 5))
 Z_THRESHOLD = float(os.environ.get("Z_THRESHOLD", 2.0))
 
+# Threshold for the per-slice sweep the Watcher falls back to when the global
+# series looks calm. Stricter than Z_THRESHOLD because it is the maximum over
+# roughly thirty slices, and measured on the mean z across the incident window
+# rather than the peak: on healthy data some slice's *peak* z is routinely 5 to
+# 19, because one unlucky minute is all it takes, while the mean only holds up
+# when a slice is genuinely elevated throughout. Fitted on seed bases
+# 0/1000/2000, same as the attribution weight.
+SLICE_Z_THRESHOLD = float(os.environ.get("SLICE_Z_THRESHOLD", 2.5))
+SLICE_MIN_SESSIONS = int(os.environ.get("SLICE_MIN_SESSIONS", 50))
+
 
 def _ask(role: str, system: str, payload: dict, model: str = MODEL_REASONING) -> dict:
     """One reasoning turn, JSON in, JSON out. Falls back to a labelled offline
@@ -46,7 +56,16 @@ def _ask(role: str, system: str, payload: dict, model: str = MODEL_REASONING) ->
 WATCHER_BRIEF = """You are the Watcher in a broadcast control room for a live OTT service.
 You receive per-minute quality-of-experience rows that a fixed z-score rule has already
 scored. You do not re-do the maths. Decide only: is this a real incident worth waking
-someone for, or normal variance? Return JSON:
+someone for, or normal variance?
+
+`flagged` counts minutes where the ALL-UP average tripped the threshold. `slice_alarms`
+is only populated when it did not: those are individual slices running well above their
+own baseline for the whole window. A fault contained in one rendition, POP or player
+version can hurt a large cohort without moving the all-up number at all, so a populated
+`slice_alarms` is an incident even though `flagged` is 0. Treat it as localised unless
+the slice is a large share of the audience.
+
+Return JSON:
 {"is_incident": bool, "severity": "sev1"|"sev2"|"sev3", "headline": str, "confidence": 0-1}
 Severity: sev1 = live event at risk, sev2 = degraded for a large cohort, sev3 = localised."""
 
@@ -69,9 +88,16 @@ Return JSON:
  "secondary_dim": str, "secondary_value": str}"""
 
 EYEWITNESS_BRIEF = """You are the Eyewitness. You are shown sample frames captured from the
-affected stream renditions, plus the session forensics. Decide whether the picture itself is
-damaged (macroblocking, frozen frame, black frame, corrupt slice — an encoder or packaging
-fault) or whether the picture is clean and viewers are simply stalling (a delivery fault).
+affected stream renditions, the session forensics, and the error-code profile for the whole
+culprit slice. Decide whether the picture itself is damaged (macroblocking, frozen frame,
+black frame, corrupt slice — an encoder or packaging fault) or whether the picture is clean
+and viewers are simply stalling (a delivery fault).
+
+Judge the error profile by share, not presence: every slice throws a scattering of every
+code, and what identifies a fault is one code crowding out the others. A clean picture whose
+excess is contained inside a single player build is a client fault, not a delivery one — no
+amount of CDN failover moves a bug that ships with the player.
+
 This distinction changes who gets paged. Return JSON:
 {"visual_verdict": "clean"|"corrupt"|"frozen"|"black", "fault_domain": "encoder"|"packager"|"delivery",
  "evidence": str, "confidence": 0-1}"""
@@ -89,7 +115,9 @@ def run(emit: Callable[[dict], None] | None = None, scenario_key: str | None = N
     if scenario_key:
         os.environ["DEMO_SCENARIO"] = scenario_key
         if ch.demo_mode():
-            ch.client.cache_clear()
+            # Closes the running embedded engine before dropping the cache, so
+            # switching scenarios in the UI does not leak one per click.
+            ch.reset_client()
 
     run_id = ch.new_run_id()
     steps: list[ch.StepLog] = []
@@ -107,15 +135,44 @@ def run(emit: Callable[[dict], None] | None = None, scenario_key: str | None = N
     rows, ms, read = ch.run_template("detect", {
         "lookback_min": WINDOW_MIN, "baseline_min": BASELINE_MIN, "z_threshold": Z_THRESHOLD})
     flagged = [r for r in rows if r.get("is_anomalous")]
-    verdict = _ask("watcher", WATCHER_BRIEF, {"minutes": rows[:30], "flagged": len(flagged)}, MODEL_FAST)
-    record(ch.StepLog(run_id, 1, "watcher", "z-score sweep over qoe_1m",
-                      sql_executed=ch.load_template("detect"), rows_scanned=read, latency_ms=ms,
+
+    # The global series only sees a fault big enough to move the all-up average.
+    # An encoder emitting corrupt slices on one rendition hurts a fifth of the
+    # audience and lifts that average by a few percent, which reads as normal
+    # variance — so the sweep is repeated per slice, against each slice's own
+    # baseline, before anything is called quiet. Skipping this dropped real
+    # incidents at step 1, which is the same blind spot as the QoE dashboards
+    # this pipeline exists to replace.
+    slice_alarms, slice_ms, slice_read = [], 0, 0
+    if not flagged:
+        for dim in DIMENSIONS:
+            r, s_ms, s_read = ch.run_template("detect_slice", {
+                "dim": dim, "lookback_min": WINDOW_MIN, "baseline_min": BASELINE_MIN,
+                "min_sessions": SLICE_MIN_SESSIONS})
+            slice_ms += s_ms
+            slice_read += s_read
+            slice_alarms += [{"dim": dim, **row} for row in r
+                             if float(row.get("mean_z") or 0) > SLICE_Z_THRESHOLD]
+        slice_alarms.sort(key=lambda a: -float(a.get("mean_z") or 0))
+
+    verdict = _ask("watcher", WATCHER_BRIEF,
+                   {"minutes": rows[:30], "flagged": len(flagged),
+                    "slice_alarms": slice_alarms[:5]}, MODEL_FAST)
+    record(ch.StepLog(run_id, 1, "watcher",
+                      "z-score sweep over qoe_1m" if flagged else
+                      f"z-score sweep over qoe_1m, then per-slice sweep × {len(DIMENSIONS)} dims",
+                      sql_executed=ch.load_template("detect"),
+                      rows_scanned=read + slice_read, latency_ms=ms + slice_ms,
                       model=verdict["_model"], tokens_in=verdict["_tokens"][0], tokens_out=verdict["_tokens"][1],
                       finding=verdict["headline"], confidence=verdict["confidence"],
-                      result={"minutes": rows[:30], "severity": verdict["severity"]}))
+                      result={"minutes": rows[:30], "severity": verdict["severity"],
+                              "slice_alarms": slice_alarms[:5]}))
 
     if not verdict["is_incident"]:
-        return {"run_id": run_id, "status": "all_clear", "offline": not llm.credentials_present(), "steps": [s.__dict__ for s in steps]}
+        return {"run_id": run_id, "status": "all_clear",
+                "offline": not llm.credentials_present(), "embedded_db": ch.demo_mode(),
+                "severity": verdict["severity"], "final_status": "all_clear",
+                "steps": [s.__dict__ for s in steps]}
 
     # -- 2. DIAGNOSTICIAN ---------------------------------------------------
     blame, total_ms, total_read = {}, 0, 0
@@ -133,6 +190,15 @@ def run(emit: Callable[[dict], None] | None = None, scenario_key: str | None = N
     diag = _ask("diagnostician", DIAGNOSTICIAN_BRIEF, {"ranked_candidates": ranked,
                                                        "contribution_by_dimension": blame})
     dim, value = diag["culprit_dim"], diag["culprit_value"]
+    # The culprit dimension comes back from a model response and is about to be
+    # substituted into SQL. Anything outside the six rollup dimensions is a
+    # hallucination, and falling back to the top-ranked candidate is better than
+    # failing the run on one bad field.
+    if dim not in DIMENSIONS or not value:
+        fallback = ranked[0] if ranked else {"dim": "cdn", "slice": ""}
+        dim, value = fallback["dim"], fallback["slice"]
+        diag["culprit_dim"], diag["culprit_value"] = dim, value
+
     ep_at_detection = next((float(r.get("explanatory_power", 0)) for r in ranked
                             if r["dim"] == dim and r["slice"] == value), 0.0)
 
@@ -149,15 +215,26 @@ def run(emit: Callable[[dict], None] | None = None, scenario_key: str | None = N
                               "culprit_dim": dim, "culprit_value": value}))
 
     # -- 3. EYEWITNESS ------------------------------------------------------
+    # The error profile is aggregated over the whole slice rather than read off
+    # the drilled sessions. Errors are about one event in a hundred, so the
+    # twenty worst-stalling sessions often contain none, and a fault domain
+    # decided from that sample is decided by luck.
+    error_profile, e_ms, e_read = ch.run_template(
+        "error_profile", {"dim": dim, "value": value, "window_min": WINDOW_MIN})
     frames = inspect_frames(dim, value, forensics[:5])
-    eye = _ask("eyewitness", EYEWITNESS_BRIEF, {"forensics": forensics[:5], "frame_notes": frames["notes"]})
-    record(ch.StepLog(run_id, 3, "eyewitness", f"visual inspection of {frames['count']} frames",
+    eye = _ask("eyewitness", EYEWITNESS_BRIEF,
+               {"forensics": forensics[:5], "frame_notes": frames["notes"],
+                "error_profile": error_profile, "culprit_dim": dim,
+                "culprit_value": value})
+    record(ch.StepLog(run_id, 3, "eyewitness",
+                      f"visual inspection of {frames['count']} frames ({frames['source']})",
                       latency_ms=frames["latency_ms"], model=eye["_model"],
                       tokens_in=eye["_tokens"][0], tokens_out=eye["_tokens"][1],
                       finding=f"{eye['visual_verdict']} picture → {eye['fault_domain']} fault. {eye['evidence']}",
                       confidence=eye["confidence"],
                       result={"frames": frames["thumbnails"], "verdict": eye["visual_verdict"],
-                              "fault_domain": eye["fault_domain"]}))
+                              "fault_domain": eye["fault_domain"],
+                              "frame_source": frames["source"], "frame_notes": frames["notes"]}))
 
     # -- 4. IMPACT ----------------------------------------------------------
     impact_rows, i_ms, i_read = ch.run_template(
