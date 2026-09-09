@@ -14,6 +14,22 @@ WEB = Path(__file__).resolve().parent.parent / "web"
 app = FastAPI(title="The Control Room", version="1.0.0")
 
 
+@app.on_event("startup")
+def _seed_cloud() -> None:
+    """Bootstrap ClickHouse Cloud on first boot, when BOOTSTRAP_ON_START is set.
+
+    On a thread, so uvicorn binds the port immediately - a hosting platform's
+    health check must not wait behind a million-row insert. See
+    controlroom/cloud_seed.py for why the hosted deployment seeds itself.
+    """
+    import threading
+
+    from . import cloud_seed
+
+    if cloud_seed.enabled():
+        threading.Thread(target=cloud_seed.run_safely, daemon=True).start()
+
+
 @app.get("/api/mode")
 def mode() -> dict:
     """What is actually powering this instance right now.
