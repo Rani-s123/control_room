@@ -118,6 +118,7 @@ class ClickHouseMCPClient:
 
     def __init__(self, timeout: float = 60.0) -> None:
         self._timeout = timeout
+        self._dead = False
         self._requests: asyncio.Queue | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._ready: concurrent.futures.Future = concurrent.futures.Future()
@@ -188,8 +189,28 @@ class ClickHouseMCPClient:
         if self._loop is None or self._requests is None:
             raise RuntimeError("ClickHouse MCP client is not running")
         fut: concurrent.futures.Future = concurrent.futures.Future()
-        self._loop.call_soon_threadsafe(self._requests.put_nowait, (sql, fut))
-        return _parse(fut.result(timeout=self._timeout))
+        try:
+            self._loop.call_soon_threadsafe(self._requests.put_nowait, (sql, fut))
+            return _parse(fut.result(timeout=self._timeout))
+        except Exception:
+            # Any failure here may mean the subprocess is gone. Flag it rather
+            # than guess: ch.reader() rebuilds the session on the next call.
+            self._dead = True
+            raise
+
+    def alive(self) -> bool:
+        """Whether this session can still carry a query.
+
+        The stdio server is a subprocess: it can die under us - ClickHouse Cloud
+        idling out, a dropped connection, an OOM - and the MCP library's only
+        signal is "Cannot send a request, as the client has been closed" on the
+        next call. Callers check this so a dead session is replaced instead of
+        being handed out again.
+        """
+        return (not self._dead
+                and self._thread.is_alive()
+                and self._loop is not None
+                and not self._loop.is_closed())
 
     def command(self, sql: str) -> None:
         raise RuntimeError(

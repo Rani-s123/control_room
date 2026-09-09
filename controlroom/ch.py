@@ -182,7 +182,22 @@ def reset_client() -> None:
         cached.cache_clear()
 
 
-@functools.lru_cache(maxsize=1)
+_reader = None
+_reader_lock = __import__("threading").Lock()
+
+
+def reset_reader() -> None:
+    """Drop the cached MCP session so the next reader() builds a fresh one."""
+    global _reader
+    with _reader_lock:
+        dead, _reader = _reader, None
+    if dead is not None:
+        try:
+            dead.close()
+        except Exception:
+            pass
+
+
 def reader():
     """The client that executes SELECTs on the critical path.
 
@@ -190,11 +205,21 @@ def reader():
     is separate from `client()` because the MCP server is read-only: schema
     creation and the run log have to go through the direct connection, so both
     exist at once and each does the half it can.
+
+    Deliberately not lru_cached. The MCP server is a subprocess and it can die
+    between requests; a cache would then hand out the same dead session for the
+    lifetime of the process, and every query after that fails with "Cannot send
+    a request, as the client has been closed". The session is reused while it is
+    alive and rebuilt when it is not.
     """
     if transport() != "mcp":
         return client()
     from .mcp_client import ClickHouseMCPClient
-    return ClickHouseMCPClient()
+    global _reader
+    with _reader_lock:
+        if _reader is None or not _reader.alive():
+            _reader = ClickHouseMCPClient()
+        return _reader
 
 
 @functools.lru_cache(maxsize=1)
@@ -267,14 +292,23 @@ def run_template(name: str, params: dict, statement: int = 0) -> tuple[list[dict
         raise ValueError(f"unknown dimension {params['dim']!r}; "
                          f"expected one of {sorted(ALLOWED_DIMENSIONS)}")
     sql = load_template(name).split(";")[statement]
-    conn = reader()
     started = time.perf_counter()
-    if transport() == "mcp":
-        # The MCP query tool takes one finished string, so bind before sending.
-        res = conn.query(bind_params(sql, params))
-    else:
-        # clickhouse-connect binds server-side; the embedded client binds itself.
-        res = conn.query(sql, parameters=params)
+    for attempt in (1, 2):
+        conn = reader()
+        try:
+            if transport() == "mcp":
+                # The MCP tool takes one finished string, so bind before sending.
+                res = conn.query(bind_params(sql, params))
+            else:
+                # clickhouse-connect binds server-side; embedded binds itself.
+                res = conn.query(sql, parameters=params)
+            break
+        except Exception:
+            # A dead stdio session is the common failure and it is invisible
+            # until the first query. Rebuild once, then let the error stand.
+            if attempt == 2 or transport() != "mcp":
+                raise
+            reset_reader()
     elapsed = int((time.perf_counter() - started) * 1000)
     rows = [dict(zip(res.column_names, r)) for r in res.result_rows]
     rows_read = int(res.summary.get("read_rows", 0)) if res.summary else 0
