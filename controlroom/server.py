@@ -28,7 +28,7 @@ def mode() -> dict:
                          "mcp": "ClickHouse Cloud via MCP"}[transport],
             "transport": transport,
             "mcp_server": "mcp-clickhouse" if transport == "mcp" else None,
-            "reasoning": "offline stub" if not llm.credentials_present() else "Gemini on Vertex AI",
+            "reasoning": llm.reasoning_label(),
             "degraded": ch.demo_mode() or not llm.credentials_present()}
 
 

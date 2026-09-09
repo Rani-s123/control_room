@@ -10,13 +10,7 @@ ENV HOME=/home/user \
 
 WORKDIR /app
 COPY requirements.txt .
-
-# uv is installed with pip rather than the curl script so it lands in
-# /usr/local/bin. The curl installer puts it under /root/.local, which UID 1000
-# cannot read once USER switches below, and `uvx` is how mcp_client starts the
-# official ClickHouse MCP server.
-RUN pip install --no-cache-dir uv \
-    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY controlroom/ ./controlroom/
 COPY sql/ ./sql/
@@ -26,8 +20,13 @@ COPY data/ ./data/
 RUN chown -R user:user /app
 USER user
 
-# uvicorn binds the port before the embedded engine seeds itself, so the health
-# check passes while the first request is still generating its dataset.
+# `uv` is deliberately NOT installed. mcp_client.server_command() prefers `uvx`,
+# which would fetch mcp-clickhouse from PyPI on the first request; the package is
+# already in requirements.txt, so leaving uvx off PATH makes shutil.which find the
+# installed console script instead - no network round trip on the critical path.
+#
+# uvicorn binds the port before the read path opens, so the platform health check
+# passes while the first request is still connecting to ClickHouse.
 ENV PORT=8080
 EXPOSE 8080
 CMD exec uvicorn controlroom.server:app --host 0.0.0.0 --port ${PORT}

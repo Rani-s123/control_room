@@ -27,6 +27,21 @@ def credentials_present() -> bool:
             and bool(os.environ.get("GOOGLE_CLOUD_PROJECT")))
 
 
+def reasoning_label() -> str:
+    """What is actually answering, named accurately.
+
+    An AI Studio API key is real Gemini, but it is not Vertex AI. Reporting
+    it as Vertex would be exactly the kind of unearned claim the offline-stub
+    labelling exists to avoid, so the two are named apart.
+    """
+    if not credentials_present():
+        return "offline stub"
+    if (os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
+            and os.environ.get("GOOGLE_CLOUD_PROJECT")):
+        return "Gemini on Vertex AI"
+    return "Gemini via AI Studio (google-genai)"
+
+
 def client():
     from google import genai
     if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE":
