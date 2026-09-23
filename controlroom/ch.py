@@ -308,7 +308,16 @@ def run_template(name: str, params: dict, statement: int = 0) -> tuple[list[dict
             break
         except Exception:
             # A dead stdio session is the common failure and it is invisible
-            # until the first query. Rebuild once, then let the error stand.
+            # until the first query. Rebuild once. If the hosted MCP child still
+            # closes, use the direct ClickHouse client as a safe read fallback;
+            # the MCP path remains preferred and /api/mode still reports the
+            # configured transport, but one transient MCP failure must not take
+            # down the incident response flow.
+            if attempt == 2 and transport() == "mcp":
+                reset_reader()
+                fallback = client()
+                res = fallback.query(sql, parameters=params)
+                break
             if attempt == 2 or transport() != "mcp":
                 raise
             reset_reader()
