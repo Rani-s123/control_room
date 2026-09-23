@@ -3,7 +3,7 @@ Client for the official ClickHouse MCP server (`mcp-clickhouse`).
 
 Every read on the critical path goes through here. The SQL still ships in this
 repo and is still chosen by the pipeline, not by a model — what changes is who
-executes it: the official MCP server rather than a direct driver connection.
+executes it: the official MCP server rather than a direct driver connection. 
 That keeps the determinism argument intact (re-run a run_id, get the same
 queries against the same window) while the transport is the one ClickHouse
 publishes and maintains.
