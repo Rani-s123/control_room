@@ -968,19 +968,26 @@ rollBtn.addEventListener('click', async () => {
         if (!chunk.startsWith('data: ')) continue;
         const step = JSON.parse(chunk.slice(6));
         if (step.done) {
-          statusLamp.className = 'lamp ok';
-          statusText.textContent = step.culprit ? `CULPRIT FOUND: ${step.culprit}` : 'ALL CLEAR';
-          playTone(step.culprit ? 'klaxon' : 'resolve');
-          if (step.severity) {
-            kpiSeverity.textContent = step.severity.toUpperCase();
-            kpiSeverity.className = 'kpi-value alert';
-          }
-          if (step.culprit) {
-            kpiCulprit.textContent = step.culprit;
-            kpiCulpritSub.textContent = `Status: ${step.final_status || 'mitigated'}`;
-          }
-          if (step.revenue_at_risk) {
-            kpiRevenue.textContent = `$${parseFloat(step.revenue_at_risk).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+          // A failed worker also emits the terminal SSE frame. Never turn an
+          // error into ALL CLEAR merely because no culprit was returned.
+          if (step.status === 'error' || step.error) {
+            statusLamp.className = 'lamp standby';
+            statusText.textContent = 'RUN STOPPED';
+          } else {
+            statusLamp.className = 'lamp ok';
+            statusText.textContent = step.culprit ? `CULPRIT FOUND: ${step.culprit}` : 'ALL CLEAR';
+            playTone(step.culprit ? 'klaxon' : 'resolve');
+            if (step.severity) {
+              kpiSeverity.textContent = step.severity.toUpperCase();
+              kpiSeverity.className = 'kpi-value alert';
+            }
+            if (step.culprit) {
+              kpiCulprit.textContent = step.culprit;
+              kpiCulpritSub.textContent = `Status: ${step.final_status || 'mitigated'}`;
+            }
+            if (step.revenue_at_risk) {
+              kpiRevenue.textContent = `$${parseFloat(step.revenue_at_risk).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            }
           }
         } else {
           appendStepNode(step);

@@ -171,15 +171,18 @@ def reset_client() -> None:
     a few clicks in the UI. The MCP session owns a subprocess and a thread, so
     it needs the same treatment.
     """
-    for cached in (client, reader):
-        if getattr(cached, "cache_info", lambda: None)() and cached.cache_info().currsize:
-            try:
-                current = cached()
-                if hasattr(current, "close"):
-                    current.close()
-            except Exception:
-                pass
-        cached.cache_clear()
+    # `client` is lru_cached; `reader` is deliberately not, because an MCP
+    # subprocess can die between requests. Do not call cache_clear on the
+    # latter—the old reset path crashed every scenario switch in demo mode.
+    if client.cache_info().currsize:
+        try:
+            current = client()
+            if hasattr(current, "close"):
+                current.close()
+        except Exception:
+            pass
+    client.cache_clear()
+    reset_reader()
 
 
 _reader = None

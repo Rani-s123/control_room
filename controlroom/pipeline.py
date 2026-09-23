@@ -303,7 +303,8 @@ def stream(scenario_key: str | None = None) -> Iterator[dict]:
         try:
             result.update(run(emit=q.put, scenario_key=scenario_key))
         except Exception as exc:  # surfaced in the UI, not swallowed
-            q.put({"agent": "system", "error": str(exc)})
+            result.update({"status": "error", "error": str(exc), "final_status": "error"})
+            q.put({"agent": "system", "action": "run error", "error": str(exc)})
         finally:
             q.put(None)
 

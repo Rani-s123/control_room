@@ -47,17 +47,19 @@ _PASSTHROUGH_ENV = (
 def server_command() -> list[str]:
     """How to launch the MCP server.
 
-    `uvx` matches what the ADK agent uses and needs nothing pre-installed, but
-    it is not always on PATH — in a slim container image it usually is not — so
-    fall back to the console script and then to the module.
+    Prefer the installed console script. The production image installs
+    `mcp-clickhouse` from requirements.txt; using `uvx` first can launch a
+    second, differently-resolved MCP dependency tree and has caused stdio
+    sessions to disappear after the first request. `uvx` remains a useful
+    development fallback when the package is not installed.
     """
     override = os.environ.get("CLICKHOUSE_MCP_COMMAND")
     if override:
         return override.split()
-    if shutil.which("uvx"):
-        return ["uvx", "--from", "mcp-clickhouse", "mcp-clickhouse"]
     if shutil.which("mcp-clickhouse"):
         return ["mcp-clickhouse"]
+    if shutil.which("uvx"):
+        return ["uvx", "--from", "mcp-clickhouse", "mcp-clickhouse"]
     return ["python", "-m", "mcp_clickhouse.main"]
 
 
@@ -176,8 +178,19 @@ class ClickHouseMCPClient:
                             if not fut.done():
                                 fut.set_exception(err)
         except Exception as err:
+            self._dead = True
             if not self._ready.done():
                 self._ready.set_exception(err)
+            # Do not leave callers waiting forever if the stdio child exits
+            # while requests are queued. Every queued future must be released
+            # so ch.run_template can rebuild the session and retry once.
+            if self._requests is not None:
+                while not self._requests.empty():
+                    item = self._requests.get_nowait()
+                    if item is not None:
+                        _, fut = item
+                        if not fut.done():
+                            fut.set_exception(err)
             raise
 
     # -- caller thread ------------------------------------------------------
@@ -186,7 +199,7 @@ class ClickHouseMCPClient:
         """`parameters` are already bound into `sql` by the caller — the MCP
         tool takes a finished query string, so binding happens in ch.py against
         the dimension whitelist before anything reaches here."""
-        if self._loop is None or self._requests is None:
+        if not self.alive() or self._loop is None or self._requests is None:
             raise RuntimeError("ClickHouse MCP client is not running")
         fut: concurrent.futures.Future = concurrent.futures.Future()
         try:
@@ -218,6 +231,7 @@ class ClickHouseMCPClient:
             "use the direct connection (see controlroom/ch.py)")
 
     def close(self) -> None:
+        self._dead = True
         if self._loop is not None and self._requests is not None:
             try:
                 self._loop.call_soon_threadsafe(self._requests.put_nowait, None)
