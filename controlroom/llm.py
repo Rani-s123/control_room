@@ -7,7 +7,7 @@ Without them, the pipeline still runs end to end using the rule-based fallbacks
 below, and every step is labelled `offline-stub` in the run log, in the API
 response and in the UI banner. This exists so a reviewer can clone the repo and
 see the whole product work in one command — not to pass rules off as reasoning.
-The fallbacks are deliberately shallow: they take the top-ranked candidate and
+The fallbacks are deliberately shallow: they take the top-ranked candidate and 
 apply a lookup table. The measurable work happens in SQL either way, which is
 why `evals/run_eval.py` scores the SQL and not the prose.
 """
